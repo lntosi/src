@@ -101,6 +101,12 @@ Scheduler::schedule(time::nanoseconds after, EventCallback callback)
   (*i)->queueIt = i;
 
   if (!m_isEventExecuting && i == m_queue.begin()) {
+    // remove previously scheduled run
+    if (m_timerEvent.has_value())
+    {
+      ns3::Simulator::Cancel(m_timerEvent.value());
+    }
+
     // the new event is the first one to expire
     this->scheduleNext();
   }
@@ -153,22 +159,21 @@ void
 Scheduler::executeEvent()
 {
   m_isEventExecuting = true;
-
   m_timerEvent.reset();
-  BOOST_SCOPE_EXIT(this_) {
-    this_->m_isEventExecuting = false;
-    this_->scheduleNext();
-  } BOOST_SCOPE_EXIT_END
 
   // process all expired events
   auto now = time::steady_clock::now();
   while (!m_queue.empty()) {
+    // Dequeue pending event
     auto head = m_queue.begin();
     shared_ptr<EventInfo> info = *head;
+
+    // Postpone execution if execution time is in future
     if (info->expireTime > now) {
       break;
     }
 
+    // Remove event from queue and execute
     m_queue.erase(head);
     info->isExpired = true;
     if (ns3::Simulator::GetContext() == info->context) {
@@ -178,6 +183,10 @@ Scheduler::executeEvent()
       ns3::Simulator::ScheduleWithContext(info->context, ns3::Seconds(0), ns3::MakeEvent(info->callback));
     }
   }
+
+  // Schedule next execution
+  m_isEventExecuting = false;
+  scheduleNext();
 }
 
 } // namespace scheduler
