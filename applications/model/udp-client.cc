@@ -33,6 +33,8 @@
 #include <cstdlib>
 #include <cstdio>
 
+#include "ns3/random-variable-stream.h"
+
 namespace ns3 {
 
 NS_LOG_COMPONENT_DEFINE ("UdpClient");
@@ -69,6 +71,10 @@ UdpClient::GetTypeId (void)
                    UintegerValue (1024),
                    MakeUintegerAccessor (&UdpClient::m_size),
                    MakeUintegerChecker<uint32_t> (12,65507))
+    .AddAttribute ("Jitter",
+                   "Jitter in the data transmission", TimeValue (Seconds (0.0)),
+                   MakeTimeAccessor (&UdpClient::m_jitter),
+                   MakeTimeChecker ())
   ;
   return tid;
 }
@@ -80,6 +86,10 @@ UdpClient::UdpClient ()
   m_totalTx = 0;
   m_socket = 0;
   m_sendEvent = EventId ();
+  m_sendingAttempt = 0;
+  m_notSent = 0;
+  m_previousJitter = 0;
+  
 }
 
 UdpClient::~UdpClient ()
@@ -177,6 +187,8 @@ UdpClient::Send (void)
   seqTs.SetSeq (m_sent);
   Ptr<Packet> p = Create<Packet> (m_size-(8+4)); // 8+4 : the size of the seqTs header
   p->AddHeader (seqTs);
+  //counter for transmission attempt
+  ++m_sendingAttempt;
 
   std::stringstream peerAddressStringStream;
   if (Ipv4Address::IsMatchingType (m_peerAddress))
@@ -200,13 +212,21 @@ UdpClient::Send (void)
     }
   else
     {
+      //counter for failed transmission attempt
+      ++m_notSent;
       NS_LOG_INFO ("Error while sending " << m_size << " bytes to "
                                           << peerAddressStringStream.str ());
     }
 
   if (m_sent < m_count)
     {
-      m_sendEvent = Simulator::Schedule (m_interval, &UdpClient::Send, this);
+      Ptr<UniformRandomVariable> uRV = CreateObject<UniformRandomVariable> ();
+      double jitter = uRV->GetValue(0.0, m_jitter.GetSeconds());
+      double instant = m_interval.GetSeconds() + jitter - m_previousJitter;
+
+      m_sendEvent = Simulator::Schedule (Seconds(instant), &UdpClient::Send, this);
+      m_previousJitter = jitter;
+      
     }
 }
 
@@ -214,6 +234,24 @@ uint64_t
 UdpClient::GetTotalTx()
 {
   return m_totalTx;
+}
+
+uint32_t
+UdpClient::GetSendingAttempt()
+{
+  return m_sendingAttempt;
+}
+
+uint32_t
+UdpClient::GetNotSent()
+{
+  return m_notSent;
+}
+
+uint32_t
+UdpClient::GetSent()
+{
+  return m_sent;
 }
 
 } // Namespace ns3

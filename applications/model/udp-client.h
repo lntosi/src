@@ -67,6 +67,10 @@ public:
 
   uint64_t GetTotalTx();
 
+  uint32_t GetSendingAttempt();
+  uint32_t GetNotSent();
+  uint32_t GetSent();
+
 protected:
   virtual void DoDispose (void);
 
@@ -90,7 +94,11 @@ private:
   Address m_peerAddress; //!< Remote peer address
   uint16_t m_peerPort; //!< Remote peer port
   EventId m_sendEvent; //!< Event to send the next packet
-
+  uint32_t m_sendingAttempt; // Counter for attempted transmission of packets
+  uint32_t m_notSent; // Counter for packets not sent
+  double m_previousJitter;
+  Time m_jitter; // Value used to sample a jitter from the interval [0, m_jitter]
+  
 };
 
 } // namespace ns3
